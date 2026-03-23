@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Assistente Financeiro</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header / Balance -->
+        <header class="header">
+            <p class="subtitle">Caixa da Empresa</p>
+            <h1 class="balance" id="totalBalance">R$ 0,00</h1>
+        </header>
+
+        <!-- AI Advisor Card -->
+        <section class="advisor-card status-warning" id="advisorCard">
+            <div class="advisor-header">
+                <i class="fa-solid fa-robot"></i>
+                <span>Seu Consultor Virtual</span>
+            </div>
+            <p class="advisor-message" id="advisorMessage">Conectando aos servidores seguros na nuvem...</p>
+        </section>
+
+        <!-- Action Buttons -->
+        <section class="action-buttons">
+            <button class="btn btn-income" onclick="openModal('income')">
+                <i class="fa-solid fa-arrow-down"></i> + Receita
+            </button>
+            <button class="btn btn-expense" onclick="openModal('expense')">
+                <i class="fa-solid fa-arrow-up"></i> - Despesa
+            </button>
+        </section>
+        
+        <button class="btn btn-report" onclick="openReportModal()">
+            <i class="fa-solid fa-chart-pie"></i> Relatório do Mês
+        </button>
+
+        <!-- Transactions List -->
+        <section class="transactions-section">
+            <div class="section-header">
+                <h2>Últimas Movimentações</h2>
+            </div>
+            <ul class="transaction-list" id="transactionList">
+                <p style="text-align:center; color: #6b7280; padding: 20px 0;">Carregando dados da nuvem...</p>
+            </ul>
+        </section>
+    </div>
+
+    <!-- Modal for New Transaction -->
+    <div class="modal-overlay" id="transactionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Nova Despesa</h3>
+                <button class="close-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="transactionForm">
+                <input type="hidden" id="transactionType" value="expense">
+                
+                <div class="form-group">
+                    <label for="amount">Valor (R$)</label>
+                    <input type="number" id="amount" step="0.01" placeholder="Ex: 1500,00" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Descrição</label>
+                    <input type="text" id="description" placeholder="Ex: Pagamento Fornecedor X" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="category">Categoria</label>
+                    <select id="category" required>
+                        <!-- Options generated dynamically -->
+                    </select>
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn">Adicionar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Monthly Report -->
+    <div class="modal-overlay" id="reportModal">
+        <div class="modal-content" style="max-height: 85vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h3>Relatório: <span id="reportMonthName">Este Mês</span></h3>
+                <button class="close-btn" onclick="closeReportModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="reportContent">
+                <!-- Report injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK (v8 Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    
+    <script src="app.js"></script>
+</body>
+</html>
