@@ -9,15 +9,18 @@ const firebaseConfig = {
   measurementId: "G-6GQM903964"
 };
 
-// Initialize Firebase
+// Initialize
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const database = firebase.database();
 
-let transactions = [];
+// State Variables
+let allTransactions = [];
+let allObras = [];
+let currentObraId = null;
 
-// Categories Configuration
+// Categories
 const categories = {
     income: [
         { id: 'vendas', name: 'Venda / Contrato', icon: 'fa-handshake' },
@@ -34,150 +37,247 @@ const categories = {
     ]
 };
 
+// Views
+const obrasView = document.getElementById('obrasView');
+const dashboardView = document.getElementById('dashboardView');
+const obrasGrid = document.getElementById('obrasGrid');
+
+// Dashboard Elements
 const balanceEl = document.getElementById('totalBalance');
 const transactionListEl = document.getElementById('transactionList');
-const modalOverlay = document.getElementById('transactionModal');
-const transactionForm = document.getElementById('transactionForm');
 const advisorCard = document.getElementById('advisorCard');
 const advisorMessage = document.getElementById('advisorMessage');
+const subtitleEl = document.getElementById('currentObraSubtitle');
 
-// Init
+// Init logic (Fetch and Auto-Migrate Legacy Data)
 function init() {
-    // Sincronizar em tempo real da nuvem
+    // 1. Listen for Obras
+    database.ref('obras').on('value', (snapshot) => {
+        const data = snapshot.val();
+        allObras = data ? Object.values(data) : [];
+        renderObrasList();
+    });
+
+    // 2. Listen for Transactions and migrate legacy if needed
     database.ref('transactions').on('value', (snapshot) => {
         const data = snapshot.val();
-        if (data) {
-            transactions = Object.values(data);
-            transactions.sort((a,b) => new Date(a.date) - new Date(b.date));
+        allTransactions = data ? Object.values(data) : [];
+        allTransactions.sort((a,b) => new Date(a.date) - new Date(b.date));
+        
+        // Migration Check
+        const needsMigration = allTransactions.some(t => !t.obraId);
+        if (needsMigration) {
+            migrateData();
         } else {
-            transactions = [];
+            // Update current view if inside dashboard
+            if(currentObraId) {
+                updateDashboardUI();
+            }
         }
-        updateUI();
     });
 }
 
-function formatCurrency(amount) {
-    return amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function getCategoryData(catId, type) {
-    const list = categories[type];
-    const cat = list.find(c => c.id === catId);
-    return cat || { name: catId, icon: type === 'income' ? 'fa-arrow-down' : 'fa-arrow-up' };
-}
-
-function updateUI() {
-    renderTransactions();
-    calculateAndAnalyze();
-}
-
-function renderTransactions() {
-    transactionListEl.innerHTML = '';
+function migrateData() {
+    // Check if Geral exists
+    const geralId = 'caixa-geral-id';
     
-    if (transactions.length === 0) {
-        transactionListEl.innerHTML = '<p style="text-align:center; color: var(--text-muted); padding: 20px 0;">Nenhuma movimentação no banco.</p>';
+    // Create Caixa Geral Obra if missing
+    database.ref('obras/' + geralId).once('value', sn => {
+        if(!sn.exists()) {
+            database.ref('obras/' + geralId).set({
+                id: geralId,
+                name: 'Caixa Inicial Sede',
+                createdAt: new Date().toISOString()
+            });
+        }
+    });
+
+    // Retrofit all old transactions
+    const updates = {};
+    allTransactions.forEach(t => {
+        if (!t.obraId) {
+            t.obraId = geralId;
+            updates[t.id] = t;
+        }
+    });
+    if(Object.keys(updates).length > 0) {
+        database.ref('transactions').update(updates);
+    }
+}
+
+// === OBRAS LIST VIEW LOGIC === //
+function renderObrasList() {
+    obrasGrid.innerHTML = '';
+    
+    if (allObras.length === 0) {
+        obrasGrid.innerHTML = '<p style="text-align:center; color: var(--text-muted); grid-column: span 2;">Você não possui pastas. Clique em Criar Nova Obra para começar.</p>';
         return;
     }
 
-    const reversed = [...transactions].reverse();
+    // Sort by newest
+    allObras.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    reversed.forEach((t) => {
-        const li = document.createElement('li');
-        li.className = 'transaction-item';
+    allObras.forEach(obra => {
+        const card = document.createElement('div');
+        card.className = 'obra-card';
+        card.onclick = () => openObra(obra);
         
-        const isIncome = t.type === 'income';
-        const sign = isIncome ? '+' : '-';
-        const amountClass = isIncome ? 'amount-income' : 'amount-expense';
-        const iconClass = isIncome ? 'income' : 'expense';
-        const catData = getCategoryData(t.category, t.type);
-
-        li.innerHTML = `
-            <div class="transaction-info">
-                <div class="transaction-icon ${iconClass}">
-                    <i class="fa-solid ${catData.icon}"></i>
-                </div>
-                <div class="transaction-details">
-                    <h4>${t.description}</h4>
-                    <p>${catData.name}</p>
-                </div>
-            </div>
-            <div style="display: flex; align-items: center;">
-                <span class="transaction-amount ${amountClass}">${sign} ${formatCurrency(t.amount)}</span>
-                <button class="delete-btn" onclick="deleteTransaction('${t.id}')">
-                    <i class="fa-solid fa-trash-can"></i>
-                </button>
-            </div>
+        let transCount = allTransactions.filter(t => t.obraId === obra.id).length;
+        
+        card.innerHTML = `
+            <i class="fa-solid fa-folder-open obra-icon"></i>
+            <h3 class="obra-name">${obra.name}</h3>
+            <p class="obra-stats">${transCount} lançamentos</p>
         `;
-        transactionListEl.appendChild(li);
+        obrasGrid.appendChild(card);
     });
 }
 
-function calculateAndAnalyze() {
-    let income = 0;
-    let expense = 0;
-    let categoryExpenses = {};
+const newObraModal = document.getElementById('newObraModal');
+function openNewObraModal() { newObraModal.classList.add('active'); setTimeout(() => document.getElementById('obraName').focus(), 100); }
+function closeNewObraModal() { newObraModal.classList.remove('active'); document.getElementById('newObraForm').reset(); }
+newObraModal.addEventListener('click', (e) => { if (e.target === newObraModal) closeNewObraModal(); });
 
-    transactions.forEach(t => {
-        if (t.type === 'income') {
-            income += t.amount;
-        } else {
+document.getElementById('newObraForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = document.getElementById('obraName').value;
+    if(!name.trim()) return;
+
+    const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
+    const novaObra = {
+        id: newId,
+        name: name,
+        createdAt: new Date().toISOString()
+    };
+
+    database.ref('obras/' + novaObra.id).set(novaObra).then(() => {
+        closeNewObraModal();
+        openObra(novaObra); // Auto enter the newly created folder
+    });
+});
+
+// View Routing
+function openObra(obra) {
+    currentObraId = obra.id;
+    subtitleEl.innerText = obra.name;
+    obrasView.style.display = 'none';
+    dashboardView.style.display = 'flex';
+    updateDashboardUI();
+}
+
+function goBackToObras() {
+    currentObraId = null;
+    dashboardView.style.display = 'none';
+    obrasView.style.display = 'flex';
+}
+
+// === DASHBOARD LOGIC (Filtered by currentObraId) === //
+function formatCurrency(amount) {
+    return amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+function getCategoryData(catId, type) {
+    const cat = categories[type].find(c => c.id === catId);
+    return cat || { name: catId, icon: type === 'income' ? 'fa-arrow-down' : 'fa-arrow-up' };
+}
+
+function updateDashboardUI() {
+    if(!currentObraId) return;
+    const currentTrans = allTransactions.filter(t => t.obraId === currentObraId);
+    
+    // Render list
+    transactionListEl.innerHTML = '';
+    if (currentTrans.length === 0) {
+        transactionListEl.innerHTML = '<p style="text-align:center; color: var(--text-muted); padding: 20px 0;">Sua pasta está vazia. Cadastre as movimentações estruturais aqui.</p>';
+    } else {
+        const reversed = [...currentTrans].reverse();
+        reversed.forEach((t) => {
+            const li = document.createElement('li');
+            li.className = 'transaction-item';
+            const isInc = t.type === 'income';
+            const sign = isInc ? '+' : '-';
+            const catData = getCategoryData(t.category, t.type);
+
+            li.innerHTML = `
+                <div class="transaction-info">
+                    <div class="transaction-icon ${isInc ? 'income' : 'expense'}">
+                        <i class="fa-solid ${catData.icon}"></i>
+                    </div>
+                    <div class="transaction-details">
+                        <h4>${t.description}</h4>
+                        <p>${catData.name}</p>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <span class="transaction-amount ${isInc ? 'amount-income' : 'amount-expense'}">${sign} ${formatCurrency(t.amount)}</span>
+                    <button class="delete-btn" onclick="deleteTransaction('${t.id}')"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+            `;
+            transactionListEl.appendChild(li);
+        });
+    }
+
+    // Engine Calculus
+    let income = 0; let expense = 0; let catExpenses = {};
+    currentTrans.forEach(t => {
+        if(t.type === 'income') income += t.amount;
+        else {
             expense += t.amount;
-            categoryExpenses[t.category] = (categoryExpenses[t.category] || 0) + t.amount;
+            catExpenses[t.category] = (catExpenses[t.category] || 0) + t.amount;
         }
     });
 
     const balance = income - expense;
     balanceEl.innerText = formatCurrency(balance);
-
-    analyzeFinances(income, expense, balance, categoryExpenses);
+    analyzeFinances(currentTrans.length, income, expense, balance, catExpenses);
 }
 
-function analyzeFinances(income, expense, balance, categoryExpenses) {
+function analyzeFinances(qtyItems, income, expense, balance, catExpenses) {
     advisorCard.className = 'advisor-card'; 
 
-    if (transactions.length === 0) {
-        advisorMessage.innerText = "Conectado. Adicione receitas e despesas para começarmos.";
+    if (qtyItems === 0) {
+        advisorMessage.innerText = "Pasta criada! Use os botões abaixo para iniciar os lançamentos desta Obra em específico.";
         advisorCard.classList.add('status-warning');
         return;
     }
 
     if (income === 0 && expense > 0) {
-        advisorMessage.innerText = "Atenção: Tivemos saídas mas nenhuma entrada. Cuidado com a liquidez!";
+        advisorMessage.innerText = "Atenção: A obra iniciou sem capital de entrada inserido, registrando prejuízo imediato. Cuidado.";
         advisorCard.classList.add('status-danger');
         return;
     }
 
     const expenseRatio = expense / income;
-    const fuelExpense = categoryExpenses['combustivel'] || 0;
-    const materialsExpense = categoryExpenses['materiais'] || 0;
+    const fuelExpense = catExpenses['combustivel'] || 0;
+    const materialsExpense = catExpenses['materiais'] || 0;
     
     if (balance < 0) {
-        advisorMessage.innerText = "Alerta Vermelho: Caixa negativo. Otimize despesas urgentemente.";
+        advisorMessage.innerText = "Alerta: O projeto estourou o caixa injetado. Operando no prejuízo no momento.";
         advisorCard.classList.add('status-danger');
     } else if (expenseRatio >= 0.85) {
-        advisorMessage.innerText = `Cuidado! Despesas representam ${Math.round(expenseRatio * 100)}% das receitas. Margem perigosa.`;
+        advisorMessage.innerText = `Cuidado: Custo do projeto está encostando em ${Math.round(expenseRatio * 100)}% da receita isolada dele.`;
         advisorCard.classList.add('status-warning');
     } else if (fuelExpense > (income * 0.15)) {
-        advisorMessage.innerText = "Consulta Tática: Gastos altos com combustível (>15%). Considere otimizar rotas.";
+        advisorMessage.innerText = "Tática: Gastos com logística e combustível pesados (>15%). Verifique desperdício do projeto.";
         advisorCard.classList.add('status-warning');
     } else if (materialsExpense > (income * 0.40)) {
-        advisorMessage.innerText = "Dica: Custo alto de matérias-primas. Tente renegociar preços de volume.";
+        advisorMessage.innerText = "Dica: Controle as perdas de materiais de construção/insumos. Custos com fornecedores parecem elevados.";
         advisorCard.classList.add('status-warning');
     } else if (expenseRatio <= 0.6) {
-         advisorMessage.innerText = "Fantástico: Margem folgada (<60%). Caixa muito saudável!";
+         advisorMessage.innerText = "Obra lucrativa: Margem e custos saudáveis e extremamente controlados.";
          advisorCard.classList.add('status-good');
     } else {
-         advisorMessage.innerText = "Tudo em ordem. Dados sincronizados e caixa verde.";
+         advisorMessage.innerText = "Gestão controlada dessa obra. Tudo em dia.";
          advisorCard.classList.add('status-good');
     }
 }
 
-// Form Handlers
+// Transaction Modals (Binded to `currentObraId`)
+const transactionModal = document.getElementById('transactionModal');
+const transactionForm = document.getElementById('transactionForm');
+
 function openModal(type) {
     document.getElementById('transactionType').value = type;
-    const title = type === 'income' ? 'Nova Entrada' : 'Nova Saída';
-    document.getElementById('modalTitle').innerText = title;
-    
+    document.getElementById('modalTitle').innerText = type === 'income' ? 'Nova Entrada da Obra' : 'Nova Saída da Obra';
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.innerText = type === 'income' ? 'Registrar Receita' : 'Lançar Despesa';
     submitBtn.style.backgroundColor = type === 'income' ? 'var(--income-color)' : 'var(--expense-color)';
@@ -186,141 +286,104 @@ function openModal(type) {
     select.innerHTML = '';
     categories[type].forEach(cat => {
         const opt = document.createElement('option');
-        opt.value = cat.id;
-        opt.innerText = cat.name;
+        opt.value = cat.id; opt.innerText = cat.name;
         select.appendChild(opt);
     });
 
-    modalOverlay.classList.add('active');
+    transactionModal.classList.add('active');
     setTimeout(() => document.getElementById('amount').focus(), 100);
 }
 
-function closeModal() {
-    modalOverlay.classList.remove('active');
-    transactionForm.reset();
-}
-
-modalOverlay.addEventListener('click', (e) => {
-    if(e.target === modalOverlay) closeModal();
-});
+function closeModal() { transactionModal.classList.remove('active'); transactionForm.reset(); }
+transactionModal.addEventListener('click', (e) => { if(e.target === transactionModal) closeModal(); });
 
 transactionForm.addEventListener('submit', (e) => {
     e.preventDefault();
+    if(!currentObraId) return;
 
-    const type = document.getElementById('transactionType').value;
-    const amountVal = document.getElementById('amount').value.replace(',', '.');
-    const amount = parseFloat(amountVal);
+    const amount = parseFloat(document.getElementById('amount').value.replace(',', '.'));
     const description = document.getElementById('description').value;
-    const category = document.getElementById('category').value;
 
     if (!amount || isNaN(amount) || !description) return;
 
+    const id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
     const transaction = {
-        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9),
-        type,
+        id,
+        obraId: currentObraId,
+        type: document.getElementById('transactionType').value,
         amount,
         description,
-        category,
+        category: document.getElementById('category').value,
         date: new Date().toISOString()
     };
 
-    database.ref('transactions/' + transaction.id).set(transaction).then(() => {
-        closeModal();
-    }).catch(err => {
-        alert("Erro ao salvar: " + err.message);
-    });
+    database.ref('transactions/' + id).set(transaction).then(() => closeModal());
 });
 
 function deleteTransaction(id) {
-    if(confirm('Apagar este lançamento definitivamente da nuvem?')) {
-        database.ref('transactions/' + id).remove();
-    }
+    if(confirm('Apagar lançamento da base dessa Obra?')) database.ref('transactions/' + id).remove();
 }
 
-// === REPORT LOGIC === //
+// REPORT MODAL (Filtered by Obra + Month)
 const reportModal = document.getElementById('reportModal');
 const reportContent = document.getElementById('reportContent');
 
-function openReportModal() {
-    generateMonthlyReport();
-    reportModal.classList.add('active');
-}
-
-function closeReportModal() {
-    reportModal.classList.remove('active');
-}
-
-reportModal.addEventListener('click', (e) => {
-    if(e.target === reportModal) closeReportModal();
-});
+function openReportModal() { generateMonthlyReport(); reportModal.classList.add('active'); }
+function closeReportModal() { reportModal.classList.remove('active'); }
+reportModal.addEventListener('click', (e) => { if(e.target === reportModal) closeReportModal(); });
 
 function generateMonthlyReport() {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-    
-    document.getElementById('reportMonthName').innerText = monthNames[currentMonth] + " de " + currentYear;
+    if(!currentObraId) return;
 
-    const monthlyTrans = transactions.filter(t => {
+    const now = new Date(); const currentM = now.getMonth(); const currentY = now.getFullYear();
+    const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+    document.getElementById('reportMonthName').innerText = months[currentM] + " de " + currentY;
+
+    // Filter by Obra ID AND Current Month
+    const monthlyTrans = allTransactions.filter(t => {
         const d = new Date(t.date);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        return t.obraId === currentObraId && d.getMonth() === currentM && d.getFullYear() === currentY;
     });
 
-    let totalIncome = 0;
-    let totalExpense = 0;
-    let catExpenses = {};
-
+    let inc = 0; let exp = 0; let catExp = {};
     monthlyTrans.forEach(t => {
-        if(t.type === 'income') {
-            totalIncome += t.amount;
-        } else {
-            totalExpense += t.amount;
-            catExpenses[t.category] = (catExpenses[t.category] || 0) + t.amount;
-        }
+        if(t.type === 'income') inc += t.amount;
+        else { exp += t.amount; catExp[t.category] = (catExp[t.category] || 0) + t.amount; }
     });
 
-    const balance = totalIncome - totalExpense;
+    const bal = inc - exp;
     let html = `
         <div class="summary-box">
-            <p>Saldo Geral deste Mês</p>
-            <h2 style="color: ${balance >= 0 ? 'var(--income-color)' : 'var(--expense-color)'}">${formatCurrency(balance)}</h2>
+            <p>Saldo do Projeto no Mês</p>
+            <h2 style="color: ${bal >= 0 ? 'var(--income-color)' : 'var(--expense-color)'}">${formatCurrency(bal)}</h2>
             <div style="display:flex; justify-content: space-between; margin-top: 14px; font-size: 0.95rem; color: var(--text-muted); font-weight: 500;">
-                <span style="color: var(--income-color)"><i class="fa-solid fa-arrow-down"></i> ${formatCurrency(totalIncome)}</span>
-                <span style="color: var(--expense-color)"><i class="fa-solid fa-arrow-up"></i> ${formatCurrency(totalExpense)}</span>
+                <span style="color: var(--income-color)"><i class="fa-solid fa-arrow-down"></i> ${formatCurrency(inc)}</span>
+                <span style="color: var(--expense-color)"><i class="fa-solid fa-arrow-up"></i> ${formatCurrency(exp)}</span>
             </div>
         </div>
     `;
 
-    if(totalExpense > 0) {
-        html += `<div class="report-section"><h4>Análise de Despesas</h4>`;
-        
-        const sortedCats = Object.entries(catExpenses).sort((a,b) => b[1] - a[1]);
-
+    if(exp > 0) {
+        html += `<div class="report-section"><h4>Análise de Despesas do Projeto</h4>`;
+        const sortedCats = Object.entries(catExp).sort((a,b) => b[1] - a[1]);
         sortedCats.forEach(entry => {
-            const catId = entry[0];
-            const amount = entry[1];
-            const percent = ((amount / totalExpense) * 100).toFixed(1);
-            const catName = getCategoryData(catId, 'expense').name;
-
+            const p = ((entry[1] / exp) * 100).toFixed(1);
             html += `
                 <div style="margin-bottom: 18px;">
                     <div class="report-row">
-                        <strong>${catName}</strong>
-                        <span>${formatCurrency(amount)} (${percent}%)</span>
+                        <strong>${getCategoryData(entry[0], 'expense').name}</strong>
+                        <span>${formatCurrency(entry[1])} (${p}%)</span>
                     </div>
-                    <div class="report-bar-bg">
-                        <div class="report-bar-fill" style="width: ${percent}%; background-color: var(--expense-color);"></div>
-                    </div>
+                    <div class="report-bar-bg"><div class="report-bar-fill" style="width: ${p}%; background-color: var(--expense-color);"></div></div>
                 </div>
             `;
         });
         html += `</div>`;
     } else {
-        html += `<p style="text-align:center; color: var(--text-muted); padding: 20px 0;">Nenhuma despesa para análise neste mês.</p>`;
+        html += `<p style="text-align:center; color: var(--text-muted);">A obra não reportou saídas neste mês.</p>`;
     }
-
     reportContent.innerHTML = html;
 }
 
+// Start
 init();

@@ -3,16 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Assistente Financeiro</title>
+    <title>GFA - Guardião Financeiro das Obras</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header / Balance -->
+    
+    <!-- OBRAS LIST VIEW (Pastas) -->
+    <div class="app-container" id="obrasView">
         <header class="header">
-            <p class="subtitle">Caixa da Empresa</p>
+            <p class="subtitle">Bem-vindo ao</p>
+            <h1 class="balance" style="font-size: 2.2rem; margin-bottom: 10px;">Guardião Central</h1>
+        </header>
+
+        <section class="section-header" style="margin-top: 10px;">
+            <h2>Suas Obras (Pastas)</h2>
+        </section>
+
+        <div class="obras-grid" id="obrasGrid">
+            <p style="text-align:center; color: #6b7280; width: 100%; grid-column: span 2;">Sincronizando pastas com a nuvem...</p>
+        </div>
+
+        <button class="btn btn-report" onclick="openNewObraModal()" style="margin-top: 30px;">
+            <i class="fa-solid fa-folder-plus"></i> Criar Nova Obra
+        </button>
+    </div>
+
+    <!-- OBRAS DASHBOARD VIEW (Painel Filtrado) -->
+    <div class="app-container" id="dashboardView" style="display: none;">
+        <!-- Header / Balance -->
+        <header class="header" style="position: relative;">
+            <button onclick="goBackToObras()" class="back-btn">
+                <i class="fa-solid fa-chevron-left"></i> Voltar
+            </button>
+            <p class="subtitle" id="currentObraSubtitle">Pasta Atual</p>
             <h1 class="balance" id="totalBalance">R$ 0,00</h1>
         </header>
 
@@ -20,9 +45,9 @@
         <section class="advisor-card status-warning" id="advisorCard">
             <div class="advisor-header">
                 <i class="fa-solid fa-robot"></i>
-                <span>Seu Consultor Virtual</span>
+                <span>Consultor Virtual da Obra</span>
             </div>
-            <p class="advisor-message" id="advisorMessage">Conectando aos servidores seguros na nuvem...</p>
+            <p class="advisor-message" id="advisorMessage">Analisando o caixa desta obra...</p>
         </section>
 
         <!-- Action Buttons -->
@@ -35,19 +60,38 @@
             </button>
         </section>
         
-        <button class="btn btn-report" onclick="openReportModal()">
-            <i class="fa-solid fa-chart-pie"></i> Relatório do Mês
+        <button class="btn btn-report" onclick="openReportModal()" style="margin-top: 10px;">
+            <i class="fa-solid fa-chart-pie"></i> Relatório desta Obra
         </button>
 
         <!-- Transactions List -->
         <section class="transactions-section">
             <div class="section-header">
-                <h2>Últimas Movimentações</h2>
+                <h2>Extrato da Obra</h2>
             </div>
             <ul class="transaction-list" id="transactionList">
-                <p style="text-align:center; color: #6b7280; padding: 20px 0;">Carregando dados da nuvem...</p>
+                <p style="text-align:center; color: #6b7280; padding: 20px 0;">Atualizando nuvem...</p>
             </ul>
         </section>
+    </div>
+
+    <!-- MODALS -->
+
+    <!-- Modal for New Obra (Folder) -->
+    <div class="modal-overlay" id="newObraModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Criar Pasta de Obra</h3>
+                <button class="close-btn" onclick="closeNewObraModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="newObraForm">
+                <div class="form-group">
+                    <label for="obraName">Nome da Obra/Projeto</label>
+                    <input type="text" id="obraName" placeholder="Ex: Obra Residencial Sul" required>
+                </div>
+                <button type="submit" class="submit-btn" style="background-color: var(--primary-brand);">Criar Pasta</button>
+            </form>
+        </div>
     </div>
 
     <!-- Modal for New Transaction -->
@@ -86,7 +130,7 @@
     <div class="modal-overlay" id="reportModal">
         <div class="modal-content" style="max-height: 85vh; overflow-y: auto;">
             <div class="modal-header">
-                <h3>Relatório: <span id="reportMonthName">Este Mês</span></h3>
+                <h3>Relatório da Obra: <span id="reportMonthName">Este Mês</span></h3>
                 <button class="close-btn" onclick="closeReportModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div id="reportContent">
