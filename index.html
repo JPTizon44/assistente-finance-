@@ -1,53 +1,112 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GFA - Guardião Financeiro das Obras</title>
+    <title>DHG TIZON | Guardião Financeiro das Obras</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     
-    <!-- OBRAS LIST VIEW (Pastas) -->
+    <!-- OBRAS LIST VIEW (Pastas / Guardião Central) -->
     <div class="app-container" id="obrasView">
-        <header class="header">
-            <p class="subtitle">Bem-vindo ao</p>
-            <h1 class="balance" style="font-size: 2.2rem; margin-bottom: 10px;">Guardião Central</h1>
+        
+        <!-- Brand Header -->
+        <header class="brand-header">
+            <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Alternar Modo Escuro / Claro">
+                <i class="fa-solid fa-moon" id="themeIcon"></i>
+            </button>
+            <div class="brand-badge">
+                <i class="fa-solid fa-gem"></i> Alto Padrão
+            </div>
+            <div class="brand-logo-lockup">
+                <h1 class="brand-title"><span class="gold">DHG</span> TIZON</h1>
+                <p class="brand-subtext">INVESTIMENTOS DE ALTO PADRÃO</p>
+                <p class="brand-tagline">Guardião Financeiro das Obras</p>
+            </div>
         </header>
 
-        <section class="section-header" style="margin-top: 10px;">
-            <h2>Suas Obras (Pastas)</h2>
+        <!-- Executive Consolidated Summary -->
+        <section class="executive-summary-card">
+            <div class="exec-header">
+                <span class="exec-title"><i class="fa-solid fa-building-columns"></i> Caixa Consolidado</span>
+                <span class="exec-badge" id="execObrasCount">0 Obras</span>
+            </div>
+            <p class="exec-balance-label">Saldo Geral em Todas as Obras</p>
+            <h2 class="exec-balance-val" id="execTotalBalance">R$ 0,00</h2>
+            
+            <div class="exec-metrics-grid">
+                <div class="exec-metric">
+                    <span class="exec-metric-title"><i class="fa-solid fa-arrow-down metric-income"></i> Total Entradas</span>
+                    <span class="exec-metric-val metric-income" id="execTotalIncome">R$ 0,00</span>
+                </div>
+                <div class="exec-metric">
+                    <span class="exec-metric-title"><i class="fa-solid fa-arrow-up metric-expense"></i> Total Saídas</span>
+                    <span class="exec-metric-val metric-expense" id="execTotalExpense">R$ 0,00</span>
+                </div>
+            </div>
         </section>
 
-        <div class="obras-grid" id="obrasGrid">
-            <p style="text-align:center; color: #6b7280; width: 100%; grid-column: span 2;">Sincronizando pastas com a nuvem...</p>
+        <!-- Search Obra -->
+        <div class="search-wrapper">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <input type="text" class="search-input" id="searchObraInput" placeholder="Buscar projeto ou obra..." oninput="handleSearchObra()">
         </div>
 
-        <button class="btn btn-report" onclick="openNewObraModal()" style="margin-top: 30px;">
-            <i class="fa-solid fa-folder-plus"></i> Criar Nova Obra
+        <!-- Section Header -->
+        <section class="section-header">
+            <h2><i class="fa-solid fa-folder-tree" style="color: var(--gold-primary);"></i> Pastas de Obras</h2>
+            <span class="section-badge" id="obrasCounter">0 projetos</span>
+        </section>
+
+        <!-- Grid of Obras -->
+        <div class="obras-grid" id="obrasGrid">
+            <p style="text-align:center; color: var(--text-muted); width: 100%; grid-column: span 2; padding: 30px 0;">
+                <i class="fa-solid fa-circle-notch fa-spin"></i> Sincronizando com a nuvem DHG...
+            </p>
+        </div>
+
+        <!-- Create New Obra Button -->
+        <button class="btn btn-primary-gold" onclick="openNewObraModal()">
+            <i class="fa-solid fa-folder-plus"></i> Criar Nova Pasta de Obra
         </button>
     </div>
 
-    <!-- OBRAS DASHBOARD VIEW (Painel Filtrado) -->
+    <!-- OBRAS DASHBOARD VIEW (Painel Detalhado da Obra) -->
     <div class="app-container" id="dashboardView" style="display: none;">
-        <!-- Header / Balance -->
-        <header class="header" style="position: relative;">
+        
+        <!-- Dashboard Header -->
+        <header class="dashboard-header">
             <button onclick="goBackToObras()" class="back-btn">
-                <i class="fa-solid fa-chevron-left"></i> Voltar
+                <i class="fa-solid fa-arrow-left"></i> Voltar
             </button>
-            <p class="subtitle" id="currentObraSubtitle">Pasta Atual</p>
-            <h1 class="balance" id="totalBalance">R$ 0,00</h1>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Alternar Tema" style="top: 18px; right: 16px;">
+                <i class="fa-solid fa-moon"></i>
+            </button>
+            <span class="obra-title-tag">Projeto Selecionado</span>
+            <h2 class="dashboard-obra-name" id="currentObraSubtitle">Nome da Obra</h2>
+            <p class="balance-label">Saldo em Caixa da Obra</p>
+            <h1 class="balance-amount" id="totalBalance">R$ 0,00</h1>
         </header>
 
         <!-- AI Advisor Card -->
         <section class="advisor-card status-warning" id="advisorCard">
             <div class="advisor-header">
-                <i class="fa-solid fa-robot"></i>
-                <span>Consultor Virtual da Obra</span>
+                <i class="fa-solid fa-brain"></i>
+                <span>Consultor Virtual Inteligente</span>
             </div>
-            <p class="advisor-message" id="advisorMessage">Analisando o caixa desta obra...</p>
+            <p class="advisor-message" id="advisorMessage">Analisando o fluxo financeiro da obra...</p>
         </section>
 
         <!-- Action Buttons -->
@@ -59,18 +118,45 @@
                 <i class="fa-solid fa-arrow-up"></i> - Despesa
             </button>
         </section>
+
+        <!-- Chart Card (Pie / Donut) -->
+        <section class="chart-card">
+            <div class="chart-header">
+                <div class="chart-title">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Distribuição Financeira</span>
+                </div>
+                <div class="chart-toggles">
+                    <button class="chart-toggle-btn active" id="btnChartExpense" onclick="switchDashboardChart('expense')">Despesas</button>
+                    <button class="chart-toggle-btn" id="btnChartBalance" onclick="switchDashboardChart('ratio')">Entradas vs Saídas</button>
+                </div>
+            </div>
+            <div class="chart-container-box">
+                <canvas id="dashboardChart"></canvas>
+            </div>
+        </section>
         
-        <button class="btn btn-report" onclick="openReportModal()" style="margin-top: 10px;">
-            <i class="fa-solid fa-chart-pie"></i> Relatório desta Obra
+        <!-- Report Modal Trigger -->
+        <button class="btn btn-report-gold" onclick="openReportModal()">
+            <i class="fa-solid fa-file-invoice-dollar"></i> Relatório Mensal & Demonstrativo
         </button>
 
-        <!-- Transactions List -->
+        <!-- Transactions Section -->
         <section class="transactions-section">
-            <div class="section-header">
+            <div class="section-header" style="margin-top: 0; margin-bottom: 14px;">
                 <h2>Extrato da Obra</h2>
             </div>
+            
+            <!-- Filters -->
+            <div class="filter-pills">
+                <button class="filter-pill active" onclick="setTransactionFilter('all', this)">Todos</button>
+                <button class="filter-pill" onclick="setTransactionFilter('income', this)">+ Receitas</button>
+                <button class="filter-pill" onclick="setTransactionFilter('expense', this)">- Despesas</button>
+            </div>
+
+            <!-- List -->
             <ul class="transaction-list" id="transactionList">
-                <p style="text-align:center; color: #6b7280; padding: 20px 0;">Atualizando nuvem...</p>
+                <p style="text-align:center; color: var(--text-muted); padding: 20px 0;">Atualizando lançamentos...</p>
             </ul>
         </section>
     </div>
@@ -86,10 +172,10 @@
             </div>
             <form id="newObraForm">
                 <div class="form-group">
-                    <label for="obraName">Nome da Obra/Projeto</label>
-                    <input type="text" id="obraName" placeholder="Ex: Obra Residencial Sul" required>
+                    <label for="obraName">Nome do Projeto / Obra</label>
+                    <input type="text" id="obraName" placeholder="Ex: Residencial Alphaville II" required>
                 </div>
-                <button type="submit" class="submit-btn" style="background-color: var(--primary-brand);">Criar Pasta</button>
+                <button type="submit" class="submit-btn btn-primary-gold">Criar Pasta</button>
             </form>
         </div>
     </div>
@@ -106,12 +192,12 @@
                 
                 <div class="form-group">
                     <label for="amount">Valor (R$)</label>
-                    <input type="number" id="amount" step="0.01" placeholder="Ex: 1500,00" required>
+                    <input type="number" id="amount" step="0.01" placeholder="Ex: 5000,00" required>
                 </div>
                 
                 <div class="form-group">
                     <label for="description">Descrição</label>
-                    <input type="text" id="description" placeholder="Ex: Pagamento Fornecedor X" required>
+                    <input type="text" id="description" placeholder="Ex: Pagamento Concreto Usinado" required>
                 </div>
 
                 <div class="form-group">
@@ -128,9 +214,9 @@
 
     <!-- Modal for Monthly Report -->
     <div class="modal-overlay" id="reportModal">
-        <div class="modal-content" style="max-height: 85vh; overflow-y: auto;">
+        <div class="modal-content" style="max-height: 88vh; overflow-y: auto;">
             <div class="modal-header">
-                <h3>Relatório da Obra: <span id="reportMonthName">Este Mês</span></h3>
+                <h3>Relatório: <span id="reportMonthName" style="color: var(--gold-light);">Este Mês</span></h3>
                 <button class="close-btn" onclick="closeReportModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div id="reportContent">
