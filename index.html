@@ -27,8 +27,8 @@
             <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Alternar Modo Escuro / Claro">
                 <i class="fa-solid fa-moon" id="themeIcon"></i>
             </button>
-            <div class="brand-badge">
-                <i class="fa-solid fa-gem"></i> Alto Padrão
+            <div class="brand-badge" id="cloudStatusBadge" style="transition: all 0.3s ease;">
+                <i class="fa-solid fa-cloud" style="color: #10b981;"></i> Nuvem Conectada
             </div>
             <div class="brand-logo-lockup">
                 <h1 class="brand-title"><span class="gold">DHG</span> TIZON</h1>
@@ -227,6 +227,7 @@
 
     <!-- Firebase SDK (v8 Compat) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     
     <script src="app.js"></script>

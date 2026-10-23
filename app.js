@@ -2,22 +2,75 @@
 // DHG TIZON - GUARDIÃO FINANCEIRO DAS OBRAS
 // ==========================================
 
-// Firebase Configuration (Realtime Database)
+// Firebase Configuration (Realtime Cloud Sync)
 const firebaseConfig = {
-    apiKey: "AIzaSyD2cI9JWiFxB_MEJ6MpfpM1RWLoCnh1iZU",
-    authDomain: "finance-dhg.firebaseapp.com",
-    projectId: "finance-dhg",
-    storageBucket: "finance-dhg.firebasestorage.app",
-    messagingSenderId: "947417737806",
-    appId: "1:947417737806:web:a1b2a8a857f22abd74711f",
-    measurementId: "G-6GQM903964"
+    apiKey: "AIzaSyAYYZF7RDi1qcH9y4i47bsNVCpjvPgXlsE",
+    authDomain: "sentinel-22ad5.firebaseapp.com",
+    databaseURL: "https://sentinel-22ad5-default-rtdb.firebaseio.com",
+    projectId: "sentinel-22ad5",
+    storageBucket: "sentinel-22ad5.firebasestorage.app",
+    messagingSenderId: "910901030196",
+    appId: "1:910901030196:web:67b3ec4470ac0302fc8961",
+    measurementId: "G-BZ8YMDVPJP"
 };
 
-// Initialize Firebase
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
+const DB_ROOT = 'dhg_tizon';
+const CLOUD_CREDENTIALS = {
+    email: "dhgtizon@consultoria.com",
+    password: "dhgtizonpassword123"
+};
+
+let database = null;
+let auth = null;
+let isCloudReady = false;
+
+// Storage Keys & Helpers (Offline-First Architecture)
+const STORAGE_OBRAS_KEY = 'dhg_tizon_obras';
+const STORAGE_TRANS_KEY = 'dhg_tizon_transactions';
+
+function loadLocalData() {
+    try {
+        const rawObras = localStorage.getItem(STORAGE_OBRAS_KEY);
+        if (rawObras) {
+            allObras = JSON.parse(rawObras);
+        } else {
+            allObras = [];
+        }
+        const rawTrans = localStorage.getItem(STORAGE_TRANS_KEY);
+        if (rawTrans) {
+            allTransactions = JSON.parse(rawTrans);
+        } else {
+            allTransactions = [];
+        }
+    } catch (e) {
+        console.warn('Erro ao carregar do localStorage:', e);
+    }
 }
-const database = firebase.database();
+
+function saveLocalObras() {
+    try {
+        localStorage.setItem(STORAGE_OBRAS_KEY, JSON.stringify(allObras));
+    } catch (e) {
+        console.warn('Erro ao salvar obras no localStorage:', e);
+    }
+}
+
+function saveLocalTransactions() {
+    try {
+        localStorage.setItem(STORAGE_TRANS_KEY, JSON.stringify(allTransactions));
+    } catch (e) {
+        console.warn('Erro ao salvar transações no localStorage:', e);
+    }
+}
+
+function generateSafeId(prefix = 'id') {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        try {
+            return crypto.randomUUID();
+        } catch (e) {}
+    }
+    return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+}
 
 // State Variables
 let allTransactions = [];
@@ -27,6 +80,7 @@ let currentFilter = 'all'; // 'all' | 'income' | 'expense'
 let currentChartMode = 'expense'; // 'expense' | 'ratio'
 let dashboardChartInstance = null;
 let reportChartInstance = null;
+let isInitialized = false;
 
 // Categories Definition
 const categories = {
@@ -102,58 +156,119 @@ function updateThemeIcon(theme) {
 // INITIALIZATION & REALTIME LISTENERS
 // ==========================================
 function init() {
+    if (isInitialized) return;
+    isInitialized = true;
+
     initTheme();
 
-    // 1. Listen for Obras in Firebase
-    database.ref('obras').on('value', (snapshot) => {
-        const data = snapshot.val();
-        allObras = data ? Object.values(data) : [];
-        renderExecutiveSummary();
-        renderObrasList();
-    });
+    // 1. Render imediato dos dados locais (super rápido, funciona offline)
+    loadLocalData();
+    renderExecutiveSummary();
+    renderObrasList();
 
-    // 2. Listen for Transactions in Firebase
-    database.ref('transactions').on('value', (snapshot) => {
-        const data = snapshot.val();
-        allTransactions = data ? Object.values(data) : [];
-        allTransactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+    // 2. Conecta à nuvem em segundo plano
+    initCloudSync();
+}
 
-        // Legacy check
-        const needsMigration = allTransactions.some(t => !t.obraId);
-        if (needsMigration) {
-            migrateData();
+function updateCloudBadge(status) {
+    const badges = document.querySelectorAll('#cloudStatusBadge');
+    badges.forEach(b => {
+        if (status === 'connected') {
+            b.innerHTML = '<i class="fa-solid fa-cloud" style="color: #10b981;"></i> Nuvem Conectada';
+            b.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        } else if (status === 'syncing') {
+            b.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin" style="color: var(--gold-light);"></i> Conectando à Nuvem...';
+            b.style.borderColor = 'var(--gold-primary)';
         } else {
-            renderExecutiveSummary();
-            renderObrasList();
-            if (currentObraId) {
-                updateDashboardUI();
-            }
+            b.innerHTML = '<i class="fa-solid fa-cloud-slash" style="color: #f43f5e;"></i> Modo Offline';
+            b.style.borderColor = 'rgba(244, 63, 94, 0.4)';
         }
     });
 }
 
-function migrateData() {
-    const geralId = 'caixa-geral-id';
-    database.ref('obras/' + geralId).once('value', sn => {
-        if (!sn.exists()) {
-            database.ref('obras/' + geralId).set({
-                id: geralId,
-                name: 'Caixa Inicial Sede',
-                createdAt: new Date().toISOString()
+function initCloudSync() {
+    try {
+        if (typeof firebase !== 'undefined') {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            auth = firebase.auth();
+            database = firebase.database();
+            updateCloudBadge('syncing');
+
+            // Autenticação transparente e automática na nuvem
+            auth.onAuthStateChanged((user) => {
+                if (user) {
+                    isCloudReady = true;
+                    updateCloudBadge('connected');
+                    setupCloudListeners();
+                    syncLocalToCloudIfEmpty();
+                } else {
+                    auth.signInWithEmailAndPassword(CLOUD_CREDENTIALS.email, CLOUD_CREDENTIALS.password)
+                        .catch(err => {
+                            console.warn('Erro de autenticação na nuvem:', err);
+                            updateCloudBadge('offline');
+                        });
+                }
             });
         }
+    } catch (err) {
+        console.warn('Modo offline/local ativo:', err);
+        updateCloudBadge('offline');
+    }
+}
+
+function setupCloudListeners() {
+    if (!database) return;
+
+    // Escuta Obras na Nuvem
+    database.ref(DB_ROOT + '/obras').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            allObras = Object.values(data);
+            saveLocalObras();
+            renderExecutiveSummary();
+            renderObrasList();
+        }
+        updateCloudBadge('connected');
+    }, (err) => {
+        console.warn('Erro ao escutar obras:', err);
     });
 
-    const updates = {};
-    allTransactions.forEach(t => {
-        if (!t.obraId) {
-            t.obraId = geralId;
-            updates[t.id] = t;
+    // Escuta Transações na Nuvem
+    database.ref(DB_ROOT + '/transactions').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            allTransactions = Object.values(data);
+            allTransactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+            saveLocalTransactions();
+            renderExecutiveSummary();
+            renderObrasList();
+            if (currentObraId) updateDashboardUI();
+        }
+        updateCloudBadge('connected');
+    }, (err) => {
+        console.warn('Erro ao escutar transações:', err);
+    });
+}
+
+// Se a nuvem estiver vazia e o usuário já tiver dados locais, sobe para a nuvem
+function syncLocalToCloudIfEmpty() {
+    if (!database) return;
+    database.ref(DB_ROOT + '/obras').once('value', sn => {
+        if (!sn.exists() && allObras.length > 0) {
+            const updates = {};
+            allObras.forEach(o => { updates[o.id] = o; });
+            database.ref(DB_ROOT + '/obras').set(updates);
         }
     });
-    if (Object.keys(updates).length > 0) {
-        database.ref('transactions').update(updates);
-    }
+    database.ref(DB_ROOT + '/transactions').once('value', sn => {
+        if (!sn.exists() && allTransactions.length > 0) {
+            const updates = {};
+            allTransactions.forEach(t => { updates[t.id] = t; });
+            database.ref(DB_ROOT + '/transactions').set(updates);
+        }
+    });
 }
 
 // Helper: Format Currency
@@ -253,10 +368,13 @@ function renderObrasList() {
         card.onclick = () => openObra(obra);
 
         card.innerHTML = `
+            <button class="obra-card-delete" title="Excluir Pasta de Obra" onclick="event.stopPropagation(); deleteObra('${obra.id}', '${escapeHtml(obra.name)}')">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
             <div class="obra-icon-wrap">
                 <i class="fa-solid fa-building-user obra-icon"></i>
             </div>
-            <h3 class="obra-name">${obra.name}</h3>
+            <h3 class="obra-name">${escapeHtml(obra.name)}</h3>
             <p class="obra-stats">${transCount} lançamento${transCount === 1 ? '' : 's'}</p>
             <div class="obra-balance-pill ${balanceClass}">
                 ${formatCurrency(obraBalance)}
@@ -280,23 +398,70 @@ newObraModal.addEventListener('click', (e) => {
     if (e.target === newObraModal) closeNewObraModal();
 });
 
+// Adicionar Nova Obra (Instantâneo + Offline-First + Sincronização em Nuvem)
 document.getElementById('newObraForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const name = document.getElementById('obraName').value;
-    if (!name.trim()) return;
+    const nameInput = document.getElementById('obraName');
+    const name = (nameInput ? nameInput.value : '').trim();
+    if (!name) return;
 
-    const newId = crypto.randomUUID ? crypto.randomUUID() : 'obra_' + Math.random().toString(36).substr(2, 9);
+    const newId = generateSafeId('obra');
     const novaObra = {
         id: newId,
-        name: name.trim(),
+        name: name,
         createdAt: new Date().toISOString()
     };
 
-    database.ref('obras/' + novaObra.id).set(novaObra).then(() => {
-        closeNewObraModal();
-        openObra(novaObra);
-    });
+    // 1. Salva localmente de imediato
+    allObras.unshift(novaObra);
+    saveLocalObras();
+
+    // 2. Atualiza a interface e fecha o modal na hora
+    renderExecutiveSummary();
+    renderObrasList();
+    closeNewObraModal();
+
+    // 3. Abre a obra criada imediatamente
+    openObra(novaObra);
+
+    // 4. Sincroniza em segundo plano com a nuvem (aparece em todos os aparelhos na hora!)
+    if (database) {
+        database.ref(DB_ROOT + '/obras/' + novaObra.id).set(novaObra).catch(err => {
+            console.warn('Erro ao salvar na nuvem:', err);
+        });
+    }
 });
+
+// Excluir Obra
+function deleteObra(obraId, obraName) {
+    if (confirm(`Deseja realmente excluir a pasta da obra "${obraName}"?\nTodos os lançamentos vinculados a ela também serão removidos de todos os aparelhos.`)) {
+        allObras = allObras.filter(o => o.id !== obraId);
+        saveLocalObras();
+
+        allTransactions = allTransactions.filter(t => t.obraId !== obraId);
+        saveLocalTransactions();
+
+        if (currentObraId === obraId) {
+            goBackToObras();
+        } else {
+            renderExecutiveSummary();
+            renderObrasList();
+        }
+
+        if (database) {
+            database.ref(DB_ROOT + '/obras/' + obraId).remove().catch(() => {});
+            // Remove transações desta obra na nuvem também
+            database.ref(DB_ROOT + '/transactions').once('value', sn => {
+                const data = sn.val() || {};
+                Object.values(data).forEach(t => {
+                    if (t.obraId === obraId) {
+                        database.ref(DB_ROOT + '/transactions/' + t.id).remove().catch(() => {});
+                    }
+                });
+            });
+        }
+    }
+}
 
 // ==========================================
 // NAVIGATION & VIEW SWITCHING
@@ -607,30 +772,51 @@ transactionForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!currentObraId) return;
 
-    const amount = parseFloat(document.getElementById('amount').value.replace(',', '.'));
-    const description = document.getElementById('description').value;
+    const amountInput = document.getElementById('amount').value.replace(',', '.');
+    const amount = parseFloat(amountInput);
+    const description = (document.getElementById('description').value || '').trim();
 
-    if (!amount || isNaN(amount) || !description.trim()) return;
+    if (!amount || isNaN(amount) || !description) return;
 
-    const id = crypto.randomUUID ? crypto.randomUUID() : 'tx_' + Math.random().toString(36).substr(2, 9);
+    const id = generateSafeId('tx');
     const transaction = {
         id,
         obraId: currentObraId,
         type: document.getElementById('transactionType').value,
         amount: Math.abs(amount),
-        description: description.trim(),
+        description: description,
         category: document.getElementById('category').value,
         date: new Date().toISOString()
     };
 
-    database.ref('transactions/' + id).set(transaction).then(() => {
-        closeModal();
-    });
+    // 1. Salva localmente de imediato
+    allTransactions.push(transaction);
+    allTransactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+    saveLocalTransactions();
+
+    // 2. Atualiza a tela e fecha o modal na hora
+    updateDashboardUI();
+    renderExecutiveSummary();
+    closeModal();
+
+    // 3. Sincroniza em nuvem em tempo real (aparece em todos os aparelhos na hora!)
+    if (database) {
+        database.ref(DB_ROOT + '/transactions/' + id).set(transaction).catch(err => {
+            console.warn('Erro ao salvar transação na nuvem:', err);
+        });
+    }
 });
 
 function deleteTransaction(id) {
     if (confirm('Deseja realmente excluir este lançamento desta obra?')) {
-        database.ref('transactions/' + id).remove();
+        allTransactions = allTransactions.filter(t => t.id !== id);
+        saveLocalTransactions();
+        updateDashboardUI();
+        renderExecutiveSummary();
+
+        if (database) {
+            database.ref(DB_ROOT + '/transactions/' + id).remove().catch(() => {});
+        }
     }
 }
 
