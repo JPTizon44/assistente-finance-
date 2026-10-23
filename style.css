@@ -390,6 +390,29 @@ body {
     transform: scale(0.97);
 }
 
+.obra-card-delete {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    opacity: 0.45;
+    transition: all 0.2s ease;
+    z-index: 5;
+}
+
+.obra-card-delete:hover {
+    color: var(--expense-color);
+    background: rgba(244, 63, 94, 0.15);
+    opacity: 1;
+    transform: scale(1.15);
+}
+
 .obra-icon-wrap {
     width: 52px;
     height: 52px;
@@ -844,8 +867,8 @@ body {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     background-color: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(6px);
     display: flex;
@@ -855,6 +878,9 @@ body {
     pointer-events: none;
     transition: opacity 0.3s ease;
     z-index: 1000;
+    /* Garante que o modal não some com o teclado mobile */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .modal-overlay.active {
@@ -868,15 +894,29 @@ body {
     max-width: 520px;
     border-radius: 28px 28px 0 0;
     padding: 30px 24px;
+    padding-bottom: calc(30px + env(safe-area-inset-bottom, 16px));
     border: 1px solid var(--card-border);
     border-bottom: none;
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
     transform: translateY(100%);
     transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Permite scroll interno quando o teclado empurra o conteúdo */
+    max-height: 92vh;
+    overflow-y: auto;
+    /* Fica na base da tela, mas não esconde com o teclado */
+    position: relative;
+    flex-shrink: 0;
 }
 
 .modal-overlay.active .modal-content {
     transform: translateY(0);
+}
+
+/* Quando teclado está ativo no mobile, o modal vira centralizado */
+@supports (height: 100dvh) {
+    .modal-overlay {
+        height: 100dvh;
+    }
 }
 
 .modal-header {
@@ -1016,15 +1056,35 @@ body {
     transition: width 0.5s ease;
 }
 
-/* RESPONSIVE */
-@media (max-width: 400px) {
+/* RESPONSIVE & MOBILE POLISH */
+@media (max-width: 520px) {
+    .app-container {
+        padding: 16px 14px;
+        gap: 16px;
+    }
     .obras-grid {
         grid-template-columns: 1fr;
+        gap: 12px;
     }
     .brand-title {
-        font-size: 1.8rem;
+        font-size: 1.85rem;
     }
     .balance-amount {
-        font-size: 2.2rem;
+        font-size: 2.3rem;
+    }
+    .modal-content {
+        padding: 24px 18px;
+        padding-bottom: calc(24px + env(safe-area-inset-bottom, 16px));
+        max-height: 85vh;
+        border-radius: 24px 24px 0 0;
+    }
+    .btn, button {
+        touch-action: manipulation;
+    }
+    /* Inputs maiores no mobile para facilitar toque */
+    .form-group input,
+    .form-group select {
+        font-size: 1rem;
+        padding: 16px;
     }
 }

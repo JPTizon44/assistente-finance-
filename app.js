@@ -388,7 +388,12 @@ function renderObrasList() {
 const newObraModal = document.getElementById('newObraModal');
 function openNewObraModal() {
     newObraModal.classList.add('active');
-    setTimeout(() => document.getElementById('obraName').focus(), 150);
+    setTimeout(() => {
+        const input = document.getElementById('obraName');
+        input.focus();
+        // Garante que o input fique visível quando o teclado abrir no mobile
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
 }
 function closeNewObraModal() {
     newObraModal.classList.remove('active');
@@ -756,7 +761,12 @@ function openModal(type) {
     });
 
     transactionModal.classList.add('active');
-    setTimeout(() => document.getElementById('amount').focus(), 150);
+    setTimeout(() => {
+        const input = document.getElementById('amount');
+        input.focus();
+        // Garante que o input fique visível quando o teclado abrir no mobile
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
 }
 
 function closeModal() {
@@ -989,6 +999,48 @@ function escapeHtml(string) {
     div.innerText = string || '';
     return div.innerHTML;
 }
+
+// ==========================================
+// MOBILE KEYBOARD FIX
+// Garante que o modal e inputs fiquem
+// visíveis quando o teclado virtual abre
+// ==========================================
+(function () {
+    // Detecta abertura do teclado via mudança de altura da viewport
+    if (typeof window.visualViewport !== 'undefined') {
+        window.visualViewport.addEventListener('resize', () => {
+            const activeModal = document.querySelector('.modal-overlay.active');
+            if (!activeModal) return;
+
+            const modalContent = activeModal.querySelector('.modal-content');
+            const vvHeight = window.visualViewport.height;
+            const winHeight = window.innerHeight;
+
+            // Se o teclado reduziu a viewport, ajusta o modal para ficar na área visível
+            if (vvHeight < winHeight * 0.85) {
+                // Teclado aberto: modo centralizado / scroll
+                activeModal.style.alignItems = 'flex-start';
+                activeModal.style.overflowY = 'auto';
+                modalContent.style.borderRadius = '0';
+                modalContent.style.maxHeight = vvHeight + 'px';
+
+                // Scrolla até o input focado
+                const focused = document.activeElement;
+                if (focused && modalContent.contains(focused)) {
+                    setTimeout(() => {
+                        focused.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
+                }
+            } else {
+                // Teclado fechado: restaura estilo normal
+                activeModal.style.alignItems = '';
+                activeModal.style.overflowY = '';
+                modalContent.style.borderRadius = '';
+                modalContent.style.maxHeight = '';
+            }
+        });
+    }
+})();
 
 // Initialize on Load
 document.addEventListener('DOMContentLoaded', init);
